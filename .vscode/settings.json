@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "helperfunctions.h": "c",
+        "cfunctions.h": "c"
+    }
+}
