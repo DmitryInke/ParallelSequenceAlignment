@@ -1,15 +1,14 @@
 build:
-	mpicxx -fopenmp -c main.c
-	mpicxx -fopenmp -c helperFunctions.c
-	mpicxx -fopenmp -c cFunctions.c
-	nvcc -I./inc -c cudaFunctions.cu
-	mpicxx -fopenmp -o finalProject main.o helperFunctions.o cFunctions.o cudaFunctions.o /usr/local/cuda-11.0/lib64/libcudart_static.a -ldl -lrt
-
+	mpicxx -fopenmp -c main.c -o main.o
+	mpicxx -fopenmp -c cFunctions.c -o cFunctions.o
+	mpicxx -fopenmp -o exec main.o cFunctions.o
+	
 clean:
-	rm -f *.o ./finalProject
+	rm -f *.o ./exec
 
 run:
-	mpiexec -n 2 ./finalProject
+	mpiexec -np 3 ./exec 
 
 runOn2:
-	mpiexec -np 2 -machinefile  mf  -map-by  node  ./finalProject
+	mpiexec -np 2 -machinefile  mf  -map-by  node  ./exec
+

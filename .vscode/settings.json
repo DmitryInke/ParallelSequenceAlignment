@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "helperfunctions.h": "c",
-        "cfunctions.h": "c"
-    }
+        "cfunctions.h": "c",
+        "random": "c"
+    },
+    "C_Cpp.errorSquiggles": "Disabled"
 }
