@@ -22,7 +22,7 @@ void createScoreType(MPI_Datatype* scoreType)
     MPI_Type_commit(scoreType);
 }
 
-void masterSendDataToWorkers(char* seq1, int numOfSequences, int* weights, int numProc, char** seq2arr, int seq2ArrSize,int workerArrSize)
+void masterSendDataToWorkers(char* seq1, int numOfSequences, int* weights, int numProc, char** seq2Arr, int seq2ArrSize,int workerArrSize)
 {
     int lenghtOfSeq1 = strlen(seq1) + 1;
     int i = seq2ArrSize;
@@ -43,9 +43,9 @@ void masterSendDataToWorkers(char* seq1, int numOfSequences, int* weights, int n
         MPI_Recv(&workerArrSize,1,MPI_INT,wId,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         for(int j = 0; j < workerArrSize; j++)
         {
-            lenghtOfSeq2 = strlen(seq2arr[i])+1;
+            lenghtOfSeq2 = strlen(seq2Arr[i])+1;
             MPI_Pack(&lenghtOfSeq2,1, MPI_INT,buffer,BUFF_SIZE,&pos,MPI_COMM_WORLD);
-            MPI_Pack(seq2arr[i],lenghtOfSeq2, MPI_CHAR,buffer,BUFF_SIZE,&pos,MPI_COMM_WORLD);
+            MPI_Pack(seq2Arr[i],lenghtOfSeq2, MPI_CHAR,buffer,BUFF_SIZE,&pos,MPI_COMM_WORLD);
             i++;
         }
         if(workerArrSize > 0)
@@ -53,7 +53,7 @@ void masterSendDataToWorkers(char* seq1, int numOfSequences, int* weights, int n
     }   
 }
 
-int workerReciveDataFromMaster(char** seq1, int* numOfSequences, int* weights, int* workerArrSize, char*** seq2arr,int numProc,int myRank,Score** topScore)
+int workerReciveDataFromMaster(char** seq1, int* numOfSequences, int* weights, int* workerArrSize, char*** seq2Arr,int numProc,int myRank,Score** topScore)
 {
     int lenghtOfSeq1;
     int lenghtOfSeq2;
@@ -74,8 +74,8 @@ int workerReciveDataFromMaster(char** seq1, int* numOfSequences, int* weights, i
     if(!initScore(topScore,*workerArrSize))
         return 0; 
     
-    *seq2arr = (char**)malloc(*workerArrSize*sizeof(char*));
-    if(!*seq2arr)
+    *seq2Arr = (char**)malloc(*workerArrSize*sizeof(char*));
+    if(!*seq2Arr)
     {
         fprintf(stderr,"Allocation error\n");
         return 0;
@@ -89,13 +89,13 @@ int workerReciveDataFromMaster(char** seq1, int* numOfSequences, int* weights, i
         for(int i = 0; i < *workerArrSize; i++)
         {
             MPI_Unpack(buffer,BUFF_SIZE,&pos,&lenghtOfSeq2,1,MPI_INT,MPI_COMM_WORLD);
-            (*seq2arr)[i] = (char*)malloc(lenghtOfSeq2*sizeof(char));
-            if(!(*seq2arr)[i])
+            (*seq2Arr)[i] = (char*)malloc(lenghtOfSeq2*sizeof(char));
+            if(!(*seq2Arr)[i])
             {
                 fprintf(stderr,"Allocation error\n");
                 return 0;
             }
-            MPI_Unpack(buffer,BUFF_SIZE,&pos,(*seq2arr)[i],lenghtOfSeq2,MPI_CHAR,MPI_COMM_WORLD);
+            MPI_Unpack(buffer,BUFF_SIZE,&pos,(*seq2Arr)[i],lenghtOfSeq2,MPI_CHAR,MPI_COMM_WORLD);
         }
     }
     return 1;
