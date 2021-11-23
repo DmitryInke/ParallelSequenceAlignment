@@ -101,10 +101,3 @@ int main(int argc, char *argv[])
 	return 0;
 	
 }
-
-char** seq2Arr; // sequence 2 string
-	
-	char* seq1; // sequence 1 string
-
-	Score* topScores; // The best score for every sequence 2 string
-	
