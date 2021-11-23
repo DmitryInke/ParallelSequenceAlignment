@@ -2,7 +2,31 @@
     "files.associations": {
         "helperfunctions.h": "c",
         "cfunctions.h": "c",
-        "random": "c"
+        "random": "c",
+        "myproto.h": "c",
+        "string.h": "c",
+        "array": "c",
+        "chrono": "c",
+        "compare": "c",
+        "functional": "c",
+        "istream": "c",
+        "ostream": "c",
+        "ranges": "c",
+        "ratio": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c",
+        "__atomic": "c",
+        "__functional_base": "c",
+        "__functional_base_03": "c",
+        "__hash_table": "c",
+        "__tree": "c",
+        "__tuple": "c",
+        "algorithm": "c",
+        "filesystem": "c",
+        "limits": "c",
+        "memory": "c",
+        "mpihelper.h": "c"
     },
     "C_Cpp.errorSquiggles": "Disabled"
 }
