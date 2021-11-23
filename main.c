@@ -33,41 +33,45 @@ int main(int argc, char *argv[])
 
 		calcSeq2Size(&seq2ArrSize,numProc,myRank,numOfSequences);
 
+		//printf("MASTER: %d\n", seq2ArrSize);
 		masterSendDataToWorkers(seq1,numOfSequences,weights,numProc,seq2Arr,seq2ArrSize,workerArrSize);
 		
 		time = MPI_Wtime();
 
 		// ### start cuda ###
-
+		//calcScoreAlgorithmParallel(seq2Arr,seq1,weights,topScores,seq2ArrSize);
         // ### MAYBE openMP on score_array reduce MAX- find best scores and put them in best_scores
-		// Нужно разобраться с остатками дерьма!
-    //     int location = seq2ArrSize;
-    //     for (int wId = 1; wId < numProc; wId++)   
-    //     {
-	// 		MPI_Recv(&workerArrSize,1,MPI_INT,wId,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-	// 		MPI_Recv(topScores + location, workerArrSize, scoreType, wId, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-	// 		location += workerArrSize;
-    //     }     
-                  
-    //     printf("Time for parallel is %lf\n", MPI_Wtime()-time);
-	// 	printRes(topScores,numOfSequences);
-               
-    //   // ### need to zero best_scores probably before serial ###
-    //     for (int i = 0; i < numOfSequences; i++)
-    //     {
-    //       topScores[i].n = 0; 
-	// 	  topScores[i].k = 0; 
-	// 	  topScores[i].scoreWeight = 0.0;
-    //     }
+	
+        int numJobs = seq2ArrSize;
+        for (int wId = 1; wId < numProc; wId++)   
+        {
+			MPI_Recv(&workerArrSize,1,MPI_INT,wId,0,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			MPI_Recv(topScores + numJobs, workerArrSize, scoreType, wId, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			numJobs += workerArrSize;
+        }   
 
-         
+		// handle remains
+		for (; numJobs < numOfSequences; numJobs++)
+			calcScoreAlgorithmSerial(seq1, seq2Arr[numJobs], weights,&topScores[numJobs]); 
+                  
+        printf("Time for parallel is %lf\n", MPI_Wtime()-time);
+		printRes(topScores,numOfSequences);
+               
+      // ### need to zero best_scores probably before serial ###
+        for (int i = 0; i < numOfSequences; i++)
+        {
+          topScores[i].n = 0; 
+		  topScores[i].k = 0; 
+		  topScores[i].scoreWeight = 0.0;
+        }
+     
         time = MPI_Wtime();     
         for(int i=0; i<numOfSequences; i++)
           calcScoreAlgorithmSerial(seq1, seq2Arr[i], weights,&topScores[i]); 
         printf("Time for serial is %lf\n", MPI_Wtime()-time);
 		printRes(topScores,numOfSequences);
 
-      // ### free memory related to process 0 only if exists ###
+		freeMemory(seq2Arr, seq1, topScores, numOfSequences);
 	}
 	else
 	{
@@ -82,17 +86,25 @@ int main(int argc, char *argv[])
 		// for (int i = 0; i < workerArrSize; i++)
 		// 	printf("proc #%d, size seq: %zu, str:%s, n:%d, k:%d, score:%f\n", myRank, strlen(seq2Arr[i]), seq2Arr[i],topScores[i].n,topScores[i].k,topScores[i].scoreWeight);
 
+		//printf("proc #%d, size %d\n", myRank, workerArrSize);
+
 		calcScoreAlgorithmParallel(seq2Arr,seq1,weights,topScores,workerArrSize);
-		printRes(topScores,workerArrSize);
+		//printRes(topScores,workerArrSize);
 		MPI_Send(&workerArrSize,1,MPI_INT,MASTER,0,MPI_COMM_WORLD);
 		MPI_Send(topScores,workerArrSize,scoreType,MASTER,0,MPI_COMM_WORLD);
-	}
 
-	
+		freeMemory(seq2Arr, seq1, topScores, workerArrSize);
+	}
 
 	MPI_Finalize();
 
-	// Надо удалить всякую хуйню типо освободить память!!!
 	return 0;
 	
 }
+
+char** seq2Arr; // sequence 2 string
+	
+	char* seq1; // sequence 1 string
+
+	Score* topScores; // The best score for every sequence 2 string
+	

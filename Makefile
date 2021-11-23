@@ -8,7 +8,7 @@ clean:
 	rm -f *.o ./exec
 
 run:
-	mpiexec -np 3 ./exec < input.txt
+	mpiexec -np 2 ./exec < input.txt
 
 runOn2:
 	mpiexec -np 2 -machinefile  mf  -map-by  node  ./exec

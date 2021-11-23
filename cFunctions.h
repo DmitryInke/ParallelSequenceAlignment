@@ -49,4 +49,5 @@ int initScore(Score** topScore, int size);
 void calcSeq2Size(int* seq2ArrSize, int numProc,int myRank,int numOfSequences);
 void calcScoreAlgorithmParallel(char** seq2Arr,char* seq1,int* weights,Score* topScore,int workerArrSize);
 void calcScoreAlgorithmSerial(char* seq1,char* seq2,int* weights,Score* topScore);
-void printRes(Score* topScore,int workerArrSize);	
+void printRes(Score* topScore,int workerArrSize);
+void freeMemory(char** seq2Arr, char* seq1, Score* topScores, int size);
