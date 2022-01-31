@@ -2,6 +2,7 @@
 #include <string.h>
 #include <mpi.h>
 #include "mpiHelper.h"
+#include <stddef.h>
 
 
 char buffer[BUFF_SIZE];
@@ -10,7 +11,7 @@ int pos;
 void createScoreType(MPI_Datatype* scoreType)
 {
 	Score maxScore;
-    MPI_Datatype type[NUM_VAR] = { MPI_INT, MPI_INT, MPI_FLOAT };
+    MPI_Datatype type[NUM_VAR] = { MPI_INT, MPI_INT, MPI_INT };
     int blocklen[NUM_VAR] = { 1, 1, 1 };
     MPI_Aint disp[NUM_VAR];
 
@@ -22,7 +23,7 @@ void createScoreType(MPI_Datatype* scoreType)
     MPI_Type_commit(scoreType);
 }
 
-void masterSendDataToWorkers(char* seq1, int numOfSequences, int* weights, int numProc, char** seq2Arr, int seq2ArrSize,int workerArrSize)
+void masterSendDataToWorkers(char* seq1, int numOfSequences, int numProc, char** seq2Arr, int seq2ArrSize,int workerArrSize, int** scoreMat)
 {
     int lenghtOfSeq1 = strlen(seq1) + 1;
     int i = seq2ArrSize;
@@ -31,7 +32,10 @@ void masterSendDataToWorkers(char* seq1, int numOfSequences, int* weights, int n
 
     MPI_Pack(&lenghtOfSeq1,1, MPI_INT,buffer,BUFF_SIZE,&pos,MPI_COMM_WORLD);
     MPI_Pack(seq1,lenghtOfSeq1, MPI_CHAR,buffer,BUFF_SIZE,&pos,MPI_COMM_WORLD);
-    MPI_Pack(weights,SYMBOLS_NUM, MPI_INT,buffer,BUFF_SIZE,&pos,MPI_COMM_WORLD);
+    for (int i = 0; i < ABC_NUMBER; i++)
+        for (int j = 0; j < ABC_NUMBER; j++)
+            MPI_Pack(&scoreMat[i][j], 1, MPI_INT,buffer,BUFF_SIZE,&pos,MPI_COMM_WORLD);
+        
     MPI_Pack(&numOfSequences,1, MPI_INT,buffer,BUFF_SIZE,&pos,MPI_COMM_WORLD);
 
     for(int wId = 1; wId < numProc; wId++)
@@ -53,7 +57,7 @@ void masterSendDataToWorkers(char* seq1, int numOfSequences, int* weights, int n
     }   
 }
 
-int workerReciveDataFromMaster(char** seq1, int* numOfSequences, int* weights, int* workerArrSize, char*** seq2Arr,int numProc,int myRank,Score** topScore)
+int workerReciveDataFromMaster(char** seq1, int* numOfSequences, int* workerArrSize, char*** seq2Arr,int numProc,int myRank,Score** topScore, int** scoreMat)
 {
     int lenghtOfSeq1;
     int lenghtOfSeq2;
@@ -67,7 +71,11 @@ int workerReciveDataFromMaster(char** seq1, int* numOfSequences, int* weights, i
         return 0;
     }
     MPI_Unpack(buffer,BUFF_SIZE,&pos,*seq1,lenghtOfSeq1,MPI_CHAR,MPI_COMM_WORLD);
-    MPI_Unpack(buffer,BUFF_SIZE,&pos,weights,SYMBOLS_NUM,MPI_INT,MPI_COMM_WORLD);
+
+    for (int i = 0; i < ABC_NUMBER; i++)
+        for (int j = 0; j < ABC_NUMBER; j++)
+            MPI_Unpack(buffer,BUFF_SIZE,&pos,&scoreMat[i][j],1,MPI_INT,MPI_COMM_WORLD);
+             
     MPI_Unpack(buffer,BUFF_SIZE,&pos,numOfSequences,1,MPI_INT,MPI_COMM_WORLD);
 
     calcSeq2Size(workerArrSize,numProc,myRank,*numOfSequences);
