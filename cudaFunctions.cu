@@ -1,149 +1,139 @@
 #include <cuda_runtime.h>
 #include <helper_cuda.h>
-#include <string.h>
-#include "myStructs.h"
+#include <iostream>
+#include "cFunctions.h"
+#define MAX_THREADS 1024
 
-__device__ const char* conservative[]={"NDEQ","NEQK","STA","MILV","QHRK","NHQK","FYW","HY","MILF"};
+                        
+__global__ void calcScore(Score* deviceAllScores, char* deviceSeq1, char* deviceSeq2, int lenghtOfSeq2, int threadsInBlock, int allScoresOffset, int* deviceScoreMat)
+{     
+    int i,j;
+    int count = 0; 
+    int loc = 0;
+    int scoreIndex = blockIdx.y * gridDim.x + blockIdx.x + allScoresOffset; 
+    extern __shared__ int shared_arr[];
+    
+    while (loc + threadIdx.x < lenghtOfSeq2)
+    {     	            		   
+        j = deviceSeq2[threadIdx.x+loc] - 'A';
+        if (threadIdx.x+loc >= blockIdx.y + 1) 
+            i = deviceSeq1[threadIdx.x+loc+blockIdx.x+1] - 'A';
+        else
+            i = deviceSeq1[threadIdx.x+loc+blockIdx.x] - 'A';
+        shared_arr[threadIdx.x+loc] = deviceScoreMat[i*ABC_NUMBER + j];
+        count++;
+        loc = count*threadsInBlock;          
+    }  
+    
+    __syncthreads();
 
-__device__ const char* secondConservative[]={"SAG","ATV","CSA","SGND","STPA","STNK","NEQHRK","NDEQHK","SNDEQK","HFY","FVLIM"};
-
-__device__ int checkChar(const char* s, char c)
-{
-	do{
-		if(*s == c) return 1;
-	}while (*s++);
-	return 0;
+    if(threadIdx.x == 0) 
+    {
+        deviceAllScores[scoreIndex].k = blockIdx.y + 1; 
+        deviceAllScores[scoreIndex].n = blockIdx.x; 
+        for (int i = 0; i < lenghtOfSeq2; i++)
+            deviceAllScores[scoreIndex].scoreWeight+= shared_arr[i];              
+    }
+    
 }
 
-__device__ int compare(const char* conservative[],const int size,char ch1, char ch2)
+int checkStatus(cudaError_t cudaStatus, int* deviceScoreMat, char* deviceSeq1, char* deviceSeq2, score* deviceAllScores, std::string err)
 {
-	for (int i =0; i< size;i++)
+    if(cudaStatus != cudaSuccess)
     {
-		if(checkChar(conservative[i],ch1) && checkChar(conservative[i],ch2))
-			return 1;
-	}
-	return 0;
+        std::cout << err <<std::endl;
+
+        free(deviceScoreMat);
+        free(deviceSeq1);        
+        free(deviceSeq2);    
+        free(deviceAllScores);
+            
+        return 0;
+    }
+    return 1; 
 }
 
-__global__  void createMutant(char *arr,int numElements,int hyphenIdx,int offset,const char *mainSequence,const char *secSequence)
-{
-	int i = blockDim.x * blockIdx.x + threadIdx.x;
-	if (i >= numElements-1)
-		return;
-	int g = 0;
 
-	if(i > hyphenIdx){
-		g = -1;	
-	}
-	if(i == hyphenIdx){
-		arr[i] = '-';
-	}		
-	else if(mainSequence[i+offset] == secSequence[i + g])
-		arr[i]= '$'; 
-	else if(compare(conservative,CONSERVATIVE,mainSequence[i+offset],secSequence[i + g]))
-		arr[i]= '%';
-	else if(compare(secondConservative,SECOND_CONSERVATIVE,mainSequence[i+offset],secSequence[i + g]))
-		arr[i]= '#';
-	else
-		arr[i] = ' ';
+int initCudaCalcs(char** seq2Arr, int seq2ArrSize, score* allScoresFromCuda, int* allScoresFromCudaBySize, char* seq1, int** scoreMat)
+{
+    cudaError_t cudaStatus;
+    int* deviceScoreMat = 0;
+    char* deviceSeq1 = 0;  
+    char* deviceSeq2 = 0; 
+    int lenghtOfSeq1, lenghtOfSeq2;
+    Score* deviceAllScores = 0;
+    int allScoresOffset = 0;
+    int threadsInBlock = 0;
+    int* scoreArr = (int*)malloc(sizeof(int)* ABC_NUMBER * ABC_NUMBER); 
+    scoreMatToArray(scoreMat, scoreArr);
+    
+    cudaStatus = cudaMalloc((void**)&deviceScoreMat, ABC_NUMBER * ABC_NUMBER * sizeof(int));
+    if(!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaMalloc have failed!"))
+        return 0;
+    cudaStatus = cudaMemcpy(deviceScoreMat, scoreArr, ABC_NUMBER * ABC_NUMBER * sizeof(int), cudaMemcpyHostToDevice);
+    if(!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaMemcpy have failed!"))
+        return 0; 
+ 
+    int allSize = 0;
+    for (int i = 0; i < seq2ArrSize; i++)
+        allSize += allScoresFromCudaBySize[i];
+    cudaStatus = cudaMalloc((void**)&deviceAllScores, sizeof(score) * allSize);
+    if(!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaMalloc have failed!"))
+        return 0;
+    cudaStatus = cudaMemcpy(deviceAllScores, allScoresFromCuda, sizeof(score) * allSize, cudaMemcpyHostToDevice);
+    if(!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaMemcpy have failed!"))
+        return 0;
+     
+    lenghtOfSeq1 = strlen(seq1);
+    cudaStatus = cudaMalloc((void**)&deviceSeq1, sizeof(char)* (lenghtOfSeq1 + 1));
+    if(!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaMalloc have failed!"))
+        return 0;
+    cudaStatus = cudaMemcpy(deviceSeq1, seq1, sizeof(char)* (lenghtOfSeq1 + 1), cudaMemcpyHostToDevice);
+    if(!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaMemcpy have failed!"))
+        return 0;
+      
+    for (int i = 0; i < seq2ArrSize; i++)
+    {
+        lenghtOfSeq2 = strlen(seq2Arr[i]); 
+        cudaStatus = cudaMalloc((void**)&deviceSeq2, sizeof(char)* (lenghtOfSeq2 + 1));
+        if(!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaMalloc have failed!"))
+            return 0;  
+        cudaStatus = cudaMemcpy(deviceSeq2, seq2Arr[i], sizeof(char)* (lenghtOfSeq2 + 1), cudaMemcpyHostToDevice);
+        if(!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaMemcpy have failed!"))
+            return 0;
+         
+        dim3 numBlocks (lenghtOfSeq1 - lenghtOfSeq2, lenghtOfSeq2);
+        if (MAX_THREADS < lenghtOfSeq2)
+            threadsInBlock = MAX_THREADS;
+        else
+            threadsInBlock = lenghtOfSeq2;
+    
+        calcScore<<<numBlocks,threadsInBlock,lenghtOfSeq2*sizeof(int)>>>(deviceAllScores, deviceSeq1, deviceSeq2, lenghtOfSeq2, threadsInBlock, allScoresOffset, deviceScoreMat);
+        cudaStatus = cudaDeviceSynchronize();
+        if(!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "calculateAlignmentScores have failed!"))
+            return 0;
+        
+        allScoresOffset += allScoresFromCudaBySize[i];
+    }
+    
+    cudaStatus = cudaMemcpy(allScoresFromCuda, deviceAllScores, sizeof(score) * allSize, cudaMemcpyDeviceToHost);
+    if(!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaMemcpy have failed!"))
+        return 0;
+  
+    cudaStatus = cudaFree(deviceSeq1);
+    if (!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaFree have failed!"))
+        return 0;    
+    cudaStatus = cudaFree(deviceSeq2);
+    if (!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaFree have failed!"))
+        return 0;   
+    cudaStatus = cudaFree(deviceAllScores);
+    if (!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaFree have failed!"))
+        return 0;
+     cudaStatus = cudaFree(deviceScoreMat);
+    if (!checkStatus(cudaStatus, deviceScoreMat, deviceSeq1, deviceSeq2, deviceAllScores, "cudaFree have failed!"))
+       return 0;    
+ 
+    return 1; 
 }
 
-char* computeOnGPU(int numElements,int hypenIdx,int offset,const char *mainSequence,const char *secSequence,int tid) 
-{
-    // Error code to check return values for CUDA calls
-    cudaError_t err = cudaSuccess;
 
-	//Using cuda stream
-	const int num_streams = 8;
-	cudaStream_t stream[num_streams];
-	cudaStreamCreate(&stream[tid]);
-
-    // Allocate memory on GPU to copy the data from the host
-    char *d_Mutant;
-	size_t size = numElements * sizeof(char);
-    err = cudaMalloc((void **)&d_Mutant, size);
-    if (err != cudaSuccess) 
-    {
-        fprintf(stderr, "Failed to allocate device memory - %s\n", cudaGetErrorString(err));
-        exit(EXIT_FAILURE);
-    }
-	cudaMemset(d_Mutant,0,size);
-	
-	 // Allocate memory on GPU to copy the data from the host
-    char *d_mainSequence;
-	size_t size_mainSequence = (strlen(mainSequence) + 1) * sizeof(char);
-    err = cudaMalloc((void **)&d_mainSequence, size_mainSequence);
-    if (err != cudaSuccess) 
-    {
-        fprintf(stderr, "Failed to allocate device memory - %s\n", cudaGetErrorString(err));
-        exit(EXIT_FAILURE);
-    }
-
-    // Copy data from host to the GPU memory
-    err = cudaMemcpy(d_mainSequence, mainSequence, size_mainSequence, cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) 
-    {
-        fprintf(stderr, "Failed to copy data from host to device - %s\n", cudaGetErrorString(err));
-        exit(EXIT_FAILURE);
-    }
-	
-	 // Allocate memory on GPU to copy the data from the host
-    char *d_secSequence;
-	size_t size_secSequence = (strlen(secSequence) + 1) * sizeof(char);
-    err = cudaMalloc((void **)&d_secSequence, size_secSequence);
-    if (err != cudaSuccess) 
-    {
-        fprintf(stderr, "Failed to allocate device memory - %s\n", cudaGetErrorString(err));
-        exit(EXIT_FAILURE);
-    }
-
-    // Copy data from host to the GPU memory
-    err = cudaMemcpy(d_secSequence, secSequence, size_secSequence, cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) 
-    {
-        fprintf(stderr, "Failed to copy data from host to device - %s\n", cudaGetErrorString(err));
-        exit(EXIT_FAILURE);
-    }
-
-
-    int threadsPerBlock = 256;
-    int blocksPerGrid =(numElements + threadsPerBlock - 1) / threadsPerBlock;
-	createMutant<<<blocksPerGrid, threadsPerBlock, 0, stream[tid]>>>(d_Mutant,numElements,hypenIdx,offset,d_mainSequence,d_secSequence);
-
-    err = cudaGetLastError();
-    if (err != cudaSuccess) 
-    {
-        fprintf(stderr, "Failed to launch vectorAdd kernel -  %s\n", cudaGetErrorString(err));
-        exit(EXIT_FAILURE);
-    }
-
-	char* result = (char*)malloc(numElements*sizeof(char));
-    // Copy the  result from GPU to the host memory.
-    err = cudaMemcpyAsync(result, d_Mutant, numElements, cudaMemcpyDeviceToHost, stream[tid]);
-
-    if (err != cudaSuccess) 
-    {
-        fprintf(stderr, "Failed to copy result array from device to host -%s\n", cudaGetErrorString(err));
-        exit(EXIT_FAILURE);
-    }
-
-    // Free allocated memory on GPU:
-    if (cudaFree(d_Mutant) != cudaSuccess) 
-    {
-        fprintf(stderr, "Failed to free device data - %s\n", cudaGetErrorString(err));
-        exit(EXIT_FAILURE);
-    }
-    if (cudaFree(d_mainSequence) != cudaSuccess) 
-    {
-        fprintf(stderr, "Failed to free device data - %s\n", cudaGetErrorString(err));
-        exit(EXIT_FAILURE);
-    }
-    if (cudaFree(d_secSequence) != cudaSuccess) 
-    {
-        fprintf(stderr, "Failed to free device data - %s\n", cudaGetErrorString(err));
-        exit(EXIT_FAILURE);
-    }
-
-	cudaStreamDestroy(stream[tid]);
-    return result;
-}
