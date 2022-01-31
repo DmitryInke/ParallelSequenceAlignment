@@ -1,4 +1,4 @@
-### Parallel implementation of Sequence Alignment
+# Parallel implementation of Sequence Alignment
 **Final project**
 **Course 10324, Parallel and Distributed Computation**
 
